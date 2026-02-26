@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { WinstonModuleOptions } from 'nest-winston';
 import * as winston from 'winston';
 
@@ -15,13 +16,17 @@ const devFormat = combine(
 
 const prodFormat = combine(timestamp(), json());
 
-const isDebug = process.env.DEBUG_MODE === 'true';
+export function createWinstonConfig(
+  config: ConfigService,
+): WinstonModuleOptions {
+  const isDebug = config.get<string>('DEBUG_MODE') === 'true';
 
-export const winstonConfig: WinstonModuleOptions = {
-  level: isDebug ? 'debug' : 'error',
-  transports: [
-    new winston.transports.Console({
-      format: isDebug ? devFormat : prodFormat,
-    }),
-  ],
-};
+  return {
+    level: isDebug ? 'debug' : 'error',
+    transports: [
+      new winston.transports.Console({
+        format: isDebug ? devFormat : prodFormat,
+      }),
+    ],
+  };
+}
