@@ -36,4 +36,25 @@ export class RedisService extends Redis implements OnModuleDestroy {
   async onModuleDestroy() {
     await this.quit();
   }
+
+  /**
+   * Scan keys matching pattern using SCAN (O(1) per iteration) instead of KEYS (O(N)).
+   * Safe for production with large key sets.
+   */
+  async scanKeys(pattern: string): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+    do {
+      const [nextCursor, matchedKeys] = await this.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+      keys.push(...matchedKeys);
+    } while (cursor !== '0');
+    return keys;
+  }
 }

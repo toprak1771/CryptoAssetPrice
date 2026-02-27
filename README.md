@@ -4,6 +4,8 @@ A NestJS-based cryptocurrency price inquiry service backed by the [CoinGecko API
 
 The project runs entirely on Docker. No local Node.js runtime required for running the application.
 
+**Performance & reliability:** Redis SCAN (instead of KEYS) for production-safe key lookups; JSON parse try-catch for cache resilience; Redis graceful degradation (fallback to DB when Redis is unavailable); global exception filter for consistent error responses; user-based rate limiting; Prisma transactions for register; AuthRepository for persistence separation.
+
 ---
 
 ## Task Compliance
@@ -50,8 +52,11 @@ The project also includes:
 - **Redis** – Cache layer for CoinGecko responses and history cache
 - **Circuit Breaker** – Circuit breaker for API failures
 - **Retry with Exponential Backoff** – Retry on transient errors
-- **Rate Limiting** – Redis-based rate limiting
+- **Rate Limiting** – CoinGecko API rate limit + user-based API rate limit (per userId)
 - **DTO Validation** – Request validation with `class-validator`
+- **Global Exception Filter** – Consistent error response format (statusCode, code, message, timestamp)
+- **Redis Graceful Degradation** – Fallback to DB when Redis is unavailable
+- **Redis SCAN** – Production-safe key iteration (avoids KEYS O(N) on large datasets)
 
 ## Prerequisites
 
@@ -125,6 +130,8 @@ This builds and starts the NestJS app. Migrations also run automatically on app 
 | `BATCH_WINDOW_MS` | Batching window (ms) | `5000` |
 | `BATCH_THRESHOLD` | Requests before immediate flush | `3` |
 | `CACHE_TTL_SECONDS` | Redis cache TTL for history | `10` |
+| `RATE_LIMIT_TTL_SECONDS` | Rate limit window (seconds) | `60` |
+| `RATE_LIMIT_MAX_PER_USER` | Max requests per user per window | `100` |
 
 Docker Compose overrides `DATABASE_URL`, `DATABASE_HOST`, `DATABASE_PORT`, `REDIS_HOST`, and `REDIS_PORT` for the app container.
 

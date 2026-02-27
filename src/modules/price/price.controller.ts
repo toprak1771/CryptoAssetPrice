@@ -6,6 +6,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserRateLimitGuard } from '../../common/guards/user-rate-limit.guard';
 import { PriceService } from './price.service';
 import {
   CoinIdParamDto,
@@ -17,7 +18,7 @@ import {
 
 @ApiTags('Price')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, UserRateLimitGuard)
 @Controller('price')
 export class PriceController {
   constructor(private readonly priceService: PriceService) {}
@@ -31,7 +32,10 @@ export class PriceController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Coin not found on CoinGecko' })
-  @ApiResponse({ status: 429, description: 'CoinGecko rate limit exceeded' })
+  @ApiResponse({
+    status: 429,
+    description: 'Rate limit exceeded (user or CoinGecko)',
+  })
   getPrice(
     @Param() params: CoinIdParamDto,
     @Query() query: GetPriceDto,
@@ -52,6 +56,7 @@ export class PriceController {
     type: [PriceHistoryResponseDto],
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   getHistory(
     @Param() params: CoinIdParamDto,
     @Query() query: GetHistoryDto,

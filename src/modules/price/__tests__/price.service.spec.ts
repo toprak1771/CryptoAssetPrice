@@ -26,7 +26,7 @@ const mockPriceRepository = {
 const mockRedis = {
   get: jest.fn(),
   setex: jest.fn(),
-  keys: jest.fn(),
+  scanKeys: jest.fn(),
   del: jest.fn(),
 };
 
@@ -69,7 +69,7 @@ describe('PriceService', () => {
 
       mockPriceBatcher.getPrice.mockResolvedValue(batchResult);
       mockPriceRepository.save.mockResolvedValue(savedRecord);
-      mockRedis.keys.mockResolvedValue([]);
+      mockRedis.scanKeys.mockResolvedValue([]);
 
       const result = await service.getPrice('bitcoin', 'usd', 'user-123');
 
@@ -80,7 +80,7 @@ describe('PriceService', () => {
         currency: 'usd',
         userId: 'user-123',
       });
-      expect(mockRedis.keys).toHaveBeenCalledWith(
+      expect(mockRedis.scanKeys).toHaveBeenCalledWith(
         'history:user-123:bitcoin:usd:*',
       );
     });
@@ -124,7 +124,7 @@ describe('PriceService', () => {
       };
       mockPriceBatcher.getPrice.mockResolvedValue(batchResult);
       mockPriceRepository.save.mockResolvedValue({});
-      mockRedis.keys.mockResolvedValue([
+      mockRedis.scanKeys.mockResolvedValue([
         'history:user-123:bitcoin:usd:50',
         'history:user-123:bitcoin:usd:10',
       ]);
@@ -182,6 +182,24 @@ describe('PriceService', () => {
       await service.getHistory('bitcoin', 'usd', 'user-123', 50);
 
       expect(mockRedis.setex).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to DB when cache parse fails', async () => {
+      mockRedis.get.mockResolvedValue('invalid-json');
+      const dbRecords = [
+        { id: '1', coinId: 'bitcoin', price: 67000, currency: 'usd' },
+      ];
+      mockPriceRepository.findHistory.mockResolvedValue(dbRecords);
+
+      const result = await service.getHistory('bitcoin', 'usd', 'user-123', 50);
+
+      expect(result).toEqual(dbRecords);
+      expect(mockPriceRepository.findHistory).toHaveBeenCalledWith(
+        'bitcoin',
+        'usd',
+        'user-123',
+        50,
+      );
     });
   });
 });

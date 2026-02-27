@@ -59,7 +59,7 @@ export class PriceService {
       userId: userId!,
     });
 
-    await this.invalidateHistoryCache(coinId, currency, userId!);
+    await this.invalidateHistoryCacheWithRetry(coinId, currency, userId!);
 
     this.logger.log?.(
       `Price saved: ${coinId} = ${price} ${currency}`,
@@ -77,13 +77,28 @@ export class PriceService {
   ): Promise<PriceRecord[]> {
     const cacheKey = `history:${userId}:${coinId}:${currency}:${limit}`;
 
-    const cached = await this.redis.get(cacheKey);
-    if (cached) {
-      this.logger.log?.(
-        `History cache hit for "${cacheKey}"`,
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as PriceRecord[];
+          this.logger.log?.(
+            `History cache hit for "${cacheKey}"`,
+            PriceService.name,
+          );
+          return parsed;
+        } catch (err) {
+          this.logger.warn?.(
+            `Cache parse error for "${cacheKey}", falling back to DB: ${err instanceof Error ? err.message : String(err)}`,
+            PriceService.name,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn?.(
+        `Redis unavailable for history read, falling back to DB: ${err instanceof Error ? err.message : String(err)}`,
         PriceService.name,
       );
-      return JSON.parse(cached) as PriceRecord[];
     }
 
     const records = await this.priceRepository.findHistory(
@@ -94,11 +109,18 @@ export class PriceService {
     );
 
     if (records.length > 0) {
-      await this.redis.setex(
-        cacheKey,
-        this.cacheTtlSeconds,
-        JSON.stringify(records),
-      );
+      try {
+        await this.redis.setex(
+          cacheKey,
+          this.cacheTtlSeconds,
+          JSON.stringify(records),
+        );
+      } catch (err) {
+        this.logger.warn?.(
+          `Redis unavailable for history cache write: ${err instanceof Error ? err.message : String(err)}`,
+          PriceService.name,
+        );
+      }
     }
 
     return records;
@@ -110,9 +132,35 @@ export class PriceService {
     userId: string,
   ): Promise<void> {
     const pattern = `history:${userId}:${coinId}:${currency}:*`;
-    const keys = await this.redis.keys(pattern);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call
+    const keys: string[] = await this.redis.scanKeys(pattern);
     if (keys.length > 0) {
       await this.redis.del(...keys);
+    }
+  }
+
+  private async invalidateHistoryCacheWithRetry(
+    coinId: string,
+    currency: string,
+    userId: string,
+    maxRetries = 3,
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.invalidateHistoryCache(coinId, currency, userId);
+        return;
+      } catch (err) {
+        this.logger.warn?.(
+          `History cache invalidation failed (attempt ${attempt}/${maxRetries}): ${err instanceof Error ? err.message : String(err)}`,
+          PriceService.name,
+        );
+        if (attempt === maxRetries) {
+          this.logger.warn?.(
+            'Cache invalidation skipped after retries; cache will expire via TTL',
+            PriceService.name,
+          );
+        }
+      }
     }
   }
 }

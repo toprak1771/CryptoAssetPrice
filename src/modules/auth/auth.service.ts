@@ -9,12 +9,14 @@ import { JwtService } from '@nestjs/jwt';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/database/prisma.service';
+import { AuthRepository } from './auth.repository';
 
 const SALT_ROUNDS = 10;
 
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly authRepository: AuthRepository,
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
@@ -22,41 +24,48 @@ export class AuthService {
   ) {}
 
   async register(email: string, password: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
-    const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      throw new ConflictException('Email already registered');
-    }
-
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
-    const user = await this.prisma.user.create({
-      data: { email, password: hashedPassword },
-    });
+    try {
+      const user = await this.prisma.$transaction(async (tx) => {
+        const existing = await this.authRepository.findUserByEmail(email, tx);
+        if (existing) {
+          throw new ConflictException('Email already registered');
+        }
+        return await this.authRepository.createUser(
+          { email, password: hashedPassword },
+          tx,
+        );
+      });
 
-    this.logger.log?.(`User registered: ${email}`, AuthService.name);
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument,@typescript-eslint/no-unsafe-member-access
-    return this.generateToken(user.id, user.email);
+      this.logger.log?.(`User registered: ${email}`, AuthService.name);
+      return this.generateToken(user.id, user.email);
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code: string }).code === 'P2002'
+      ) {
+        throw new ConflictException('Email already registered');
+      }
+      throw error;
+    }
   }
 
   async login(email: string, password: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.authRepository.findUserByEmail(email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument,@typescript-eslint/no-unsafe-member-access
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     this.logger.log?.(`User logged in: ${email}`, AuthService.name);
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument,@typescript-eslint/no-unsafe-member-access
     return this.generateToken(user.id, user.email);
   }
 

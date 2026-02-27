@@ -156,10 +156,26 @@ export class PriceBatcherService implements OnModuleDestroy {
     coinId: string,
     currency: string,
   ): Promise<CoinGeckoPriceResponse | null> {
-    const raw = await this.redis.get(`price:${coinId}:${currency}`);
-    if (!raw) return null;
+    try {
+      const raw = await this.redis.get(`price:${coinId}:${currency}`);
+      if (!raw) return null;
 
-    return JSON.parse(raw) as CoinGeckoPriceResponse;
+      try {
+        return JSON.parse(raw) as CoinGeckoPriceResponse;
+      } catch (err) {
+        this.logger.warn?.(
+          `Cache parse error for price:${coinId}:${currency}, treating as miss: ${err instanceof Error ? err.message : String(err)}`,
+          PriceBatcherService.name,
+        );
+        return null;
+      }
+    } catch (err) {
+      this.logger.warn?.(
+        `Redis unavailable for price cache read, treating as miss: ${err instanceof Error ? err.message : String(err)}`,
+        PriceBatcherService.name,
+      );
+      return null;
+    }
   }
 
   private async setCache(
@@ -167,11 +183,18 @@ export class PriceBatcherService implements OnModuleDestroy {
     currency: string,
     data: CoinGeckoPriceResponse,
   ): Promise<void> {
-    await this.redis.setex(
-      `price:${coinId}:${currency}`,
-      this.cacheTtlSeconds,
-      JSON.stringify(data),
-    );
+    try {
+      await this.redis.setex(
+        `price:${coinId}:${currency}`,
+        this.cacheTtlSeconds,
+        JSON.stringify(data),
+      );
+    } catch (err) {
+      this.logger.warn?.(
+        `Redis unavailable for price cache write: ${err instanceof Error ? err.message : String(err)}`,
+        PriceBatcherService.name,
+      );
+    }
   }
 
   private async checkRateLimit(): Promise<void> {
