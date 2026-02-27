@@ -11,6 +11,7 @@ export class PriceRepository {
     symbol?: string;
     price: number;
     currency: string;
+    userId: string;
   }): Promise<PriceRecord> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
     return await this.prisma.priceRecord.create({ data });
@@ -19,11 +20,12 @@ export class PriceRepository {
   async findHistory(
     coinId: string,
     currency: string,
+    userId: string,
     limit: number = 50,
   ): Promise<PriceRecord[]> {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
     return await this.prisma.priceRecord.findMany({
-      where: { coinId, currency },
+      where: { coinId, currency, userId },
       orderBy: { fetchedAt: 'desc' },
       take: limit,
     });

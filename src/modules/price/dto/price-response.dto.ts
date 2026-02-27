@@ -16,6 +16,9 @@ export class PriceResponseDto {
   @ApiProperty({ example: 'usd' })
   currency: string;
 
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  userId?: string;
+
   @ApiPropertyOptional({
     example: true,
     description: 'True when served from cache (no DB write)',
@@ -41,6 +44,9 @@ export class PriceHistoryResponseDto {
 
   @ApiProperty({ example: 'usd' })
   currency: string;
+
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  userId: string;
 
   @ApiProperty({ example: '2026-02-26T23:22:52.000Z' })
   fetchedAt: Date;

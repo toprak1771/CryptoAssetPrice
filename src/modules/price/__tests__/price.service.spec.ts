@@ -71,15 +71,18 @@ describe('PriceService', () => {
       mockPriceRepository.save.mockResolvedValue(savedRecord);
       mockRedis.keys.mockResolvedValue([]);
 
-      const result = await service.getPrice('bitcoin', 'usd');
+      const result = await service.getPrice('bitcoin', 'usd', 'user-123');
 
       expect(result).toEqual(savedRecord);
       expect(mockPriceRepository.save).toHaveBeenCalledWith({
         coinId: 'bitcoin',
         price: 67000,
         currency: 'usd',
+        userId: 'user-123',
       });
-      expect(mockRedis.keys).toHaveBeenCalledWith('history:bitcoin:usd:*');
+      expect(mockRedis.keys).toHaveBeenCalledWith(
+        'history:user-123:bitcoin:usd:*',
+      );
     });
 
     it('should skip DB write when data comes from cache', async () => {
@@ -90,7 +93,7 @@ describe('PriceService', () => {
 
       mockPriceBatcher.getPrice.mockResolvedValue(batchResult);
 
-      const result = await service.getPrice('bitcoin', 'usd');
+      const result = await service.getPrice('bitcoin', 'usd', 'user-123');
 
       expect(result).toEqual({
         coinId: 'bitcoin',
@@ -109,9 +112,9 @@ describe('PriceService', () => {
 
       mockPriceBatcher.getPrice.mockResolvedValue(batchResult);
 
-      await expect(service.getPrice('invalidcoin', 'usd')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getPrice('invalidcoin', 'usd', 'user-123'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should invalidate history cache keys after saving', async () => {
@@ -122,16 +125,16 @@ describe('PriceService', () => {
       mockPriceBatcher.getPrice.mockResolvedValue(batchResult);
       mockPriceRepository.save.mockResolvedValue({});
       mockRedis.keys.mockResolvedValue([
-        'history:bitcoin:usd:50',
-        'history:bitcoin:usd:10',
+        'history:user-123:bitcoin:usd:50',
+        'history:user-123:bitcoin:usd:10',
       ]);
       mockRedis.del.mockResolvedValue(2);
 
-      await service.getPrice('bitcoin', 'usd');
+      await service.getPrice('bitcoin', 'usd', 'user-123');
 
       expect(mockRedis.del).toHaveBeenCalledWith(
-        'history:bitcoin:usd:50',
-        'history:bitcoin:usd:10',
+        'history:user-123:bitcoin:usd:50',
+        'history:user-123:bitcoin:usd:10',
       );
     });
   });
@@ -143,7 +146,7 @@ describe('PriceService', () => {
       ];
       mockRedis.get.mockResolvedValue(JSON.stringify(cachedRecords));
 
-      const result = await service.getHistory('bitcoin', 'usd', 50);
+      const result = await service.getHistory('bitcoin', 'usd', 'user-123', 50);
 
       expect(result).toEqual(cachedRecords);
       expect(mockPriceRepository.findHistory).not.toHaveBeenCalled();
@@ -156,16 +159,17 @@ describe('PriceService', () => {
       mockRedis.get.mockResolvedValue(null);
       mockPriceRepository.findHistory.mockResolvedValue(dbRecords);
 
-      const result = await service.getHistory('bitcoin', 'usd', 50);
+      const result = await service.getHistory('bitcoin', 'usd', 'user-123', 50);
 
       expect(result).toEqual(dbRecords);
       expect(mockPriceRepository.findHistory).toHaveBeenCalledWith(
         'bitcoin',
         'usd',
+        'user-123',
         50,
       );
       expect(mockRedis.setex).toHaveBeenCalledWith(
-        'history:bitcoin:usd:50',
+        'history:user-123:bitcoin:usd:50',
         10,
         JSON.stringify(dbRecords),
       );
@@ -175,7 +179,7 @@ describe('PriceService', () => {
       mockRedis.get.mockResolvedValue(null);
       mockPriceRepository.findHistory.mockResolvedValue([]);
 
-      await service.getHistory('bitcoin', 'usd', 50);
+      await service.getHistory('bitcoin', 'usd', 'user-123', 50);
 
       expect(mockRedis.setex).not.toHaveBeenCalled();
     });

@@ -20,6 +20,7 @@ async function bootstrap() {
     .setTitle('Crypto Asset Price API')
     .setDescription('CoinGecko-backed cryptocurrency price inquiry service')
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);

@@ -31,8 +31,7 @@ export class PriceService {
     );
   }
 
-  async getPrice(coinId: string, currency: string = 'usd') {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access
+  async getPrice(coinId: string, currency: string = 'usd', userId?: string) {
     const result: BatchedPriceResult = await this.priceBatcher.getPrice(
       coinId,
       currency,
@@ -57,9 +56,10 @@ export class PriceService {
       coinId,
       price,
       currency,
+      userId: userId!,
     });
 
-    await this.invalidateHistoryCache(coinId, currency);
+    await this.invalidateHistoryCache(coinId, currency, userId!);
 
     this.logger.log?.(
       `Price saved: ${coinId} = ${price} ${currency}`,
@@ -72,9 +72,10 @@ export class PriceService {
   async getHistory(
     coinId: string,
     currency: string = 'usd',
+    userId: string,
     limit: number = 50,
   ): Promise<PriceRecord[]> {
-    const cacheKey = `history:${coinId}:${currency}:${limit}`;
+    const cacheKey = `history:${userId}:${coinId}:${currency}:${limit}`;
 
     const cached = await this.redis.get(cacheKey);
     if (cached) {
@@ -88,6 +89,7 @@ export class PriceService {
     const records = await this.priceRepository.findHistory(
       coinId,
       currency,
+      userId,
       limit,
     );
 
@@ -105,8 +107,9 @@ export class PriceService {
   private async invalidateHistoryCache(
     coinId: string,
     currency: string,
+    userId: string,
   ): Promise<void> {
-    const pattern = `history:${coinId}:${currency}:*`;
+    const pattern = `history:${userId}:${coinId}:${currency}:*`;
     const keys = await this.redis.keys(pattern);
     if (keys.length > 0) {
       await this.redis.del(...keys);
